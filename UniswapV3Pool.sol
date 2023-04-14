@@ -28,32 +28,32 @@ import './interfaces/callback/IUniswapV3SwapCallback.sol';
 import './interfaces/callback/IUniswapV3FlashCallback.sol';
 
 contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
-    using LowGasSafeMath for uint256;
+    using LowGasSafeMath for uint256; //safemath 라이브러리 변수 
     using LowGasSafeMath for int256;
     using SafeCast for uint256;
     using SafeCast for int256;
-    using Tick for mapping(int24 => Tick.Info);
-    using TickBitmap for mapping(int16 => uint256);
-    using Position for mapping(bytes32 => Position.Info);
+    using Tick for mapping(int24 => Tick.Info); //틱 변수 
+    using TickBitmap for mapping(int16 => uint256); // 틱 비트맵 
+    using Position for mapping(bytes32 => Position.Info); 
     using Position for Position.Info;
-    using Oracle for Oracle.Observation[65535];
+    using Oracle for Oracle.Observation[65535]; //오라클 변수 설정?
 
     /// @inheritdoc IUniswapV3PoolImmutables
-    address public immutable override factory;
+    address public immutable override factory; //풀 생성하는 팩토리 주소 
     /// @inheritdoc IUniswapV3PoolImmutables
-    address public immutable override token0;
+    address public immutable override token0;  //토큰0 주소
     /// @inheritdoc IUniswapV3PoolImmutables
-    address public immutable override token1;
+    address public immutable override token1;   //토큰1 주소
     /// @inheritdoc IUniswapV3PoolImmutables
-    uint24 public immutable override fee;
+    uint24 public immutable override fee;   //수수료 주소
 
     /// @inheritdoc IUniswapV3PoolImmutables
-    int24 public immutable override tickSpacing;
+    int24 public immutable override tickSpacing;    //틱 스페이싱 
 
     /// @inheritdoc IUniswapV3PoolImmutables
-    uint128 public immutable override maxLiquidityPerTick;
+    uint128 public immutable override maxLiquidityPerTick;  //틱별로 최대 유동성 변수 
 
-    struct Slot0 {
+    struct Slot0 {  //슬롯 구조체 
         // the current price
         uint160 sqrtPriceX96;
         // the current tick
@@ -79,6 +79,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     uint256 public override feeGrowthGlobal1X128;
 
     // accumulated protocol fees in token0/token1 units
+    // 토큰0/토큰1 단위안에서 누적되는 프로토콜 수수료 
     struct ProtocolFees {
         uint128 token0;
         uint128 token1;
@@ -101,6 +102,9 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     /// @dev Mutually exclusive reentrancy protection into the pool to/from a method. This method also prevents entrance
     /// to a function before the pool is initialized. The reentrancy guard is required throughout the contract because
     /// we use balance checks to determine the payment status of interactions such as mint, swap and flash.
+    /// @dev 메서드에서 풀로의 상호 배타적 재진입 방지. 이 메서드는 또한 풀이 초기화되기 전에 함수에
+    /// 풀이 초기화되기 전에 함수에 진입하는 것도 방지합니다. 재진입 보호가 컨트랙트 전체에 필요한 이유는 다음과 같습니다.
+    /// 잔액 확인을 통해 민트, 스왑, 플래시와 같은 상호작용의 결제 상태를 결정하기 때문입니다.
     modifier lock() {
         require(slot0.unlocked, 'LOK');
         slot0.unlocked = false;
@@ -109,6 +113,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     }
 
     /// @dev Prevents calling a function from anyone except the address returned by IUniswapV3Factory#owner()
+    /// @dev IUniswapV3Factory#owner()가 반환한 주소를 제외한 다른 사람의 함수 호출을 방지합니다.
+    /// 즉팩토리 컨트랙트를 가진 Owner만 호출할 수 있게 하는 modifier 
     modifier onlyFactoryOwner() {
         require(msg.sender == IUniswapV3Factory(factory).owner());
         _;
@@ -116,6 +122,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
     constructor() {
         int24 _tickSpacing;
+        //중요 변수들, 팩토리, 토큰0,1 수수료, 틱스페이싱 
         (factory, token0, token1, fee, _tickSpacing) = IUniswapV3PoolDeployer(msg.sender).parameters();
         tickSpacing = _tickSpacing;
 
@@ -123,6 +130,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     }
 
     /// @dev Common checks for valid tick inputs.
+    /// @dev 공통적으로 유효한 틱 입력이 있는지 확인합니다.
     function checkTicks(int24 tickLower, int24 tickUpper) private pure {
         require(tickLower < tickUpper, 'TLU');
         require(tickLower >= TickMath.MIN_TICK, 'TLM');
@@ -130,12 +138,16 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     }
 
     /// @dev Returns the block timestamp truncated to 32 bits, i.e. mod 2**32. This method is overridden in tests.
+    /// @dev 32비트로 잘린 블록 타임스탬프(예: mod 2**32)를 반환합니다. 이 메서드는 테스트에서 재정의됩니다.
     function _blockTimestamp() internal view virtual returns (uint32) {
         return uint32(block.timestamp); // truncation is desired
     }
 
     /// @dev Get the pool's balance of token0
     /// @dev This function is gas optimized to avoid a redundant extcodesize check in addition to the returndatasize
+    /// check
+    /// @dev 32비트로 잘린 블록 타임스탬프(예: mod 2**32)를 반환합니다. 이 메서드는 테스트에서 재정의됩니다./// @dev 풀의 토큰0 잔액을 가져옵니다.
+    /// @dev 이 함수는 리턴데이터사이즈와 더불어 중복된 익스코드사이즈 검사를 피하기 위해 가스 최적화되어 있습니다.
     /// check
     function balance0() private view returns (uint256) {
         (bool success, bytes memory data) =
